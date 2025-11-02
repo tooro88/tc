@@ -79,6 +79,8 @@ mule-1, mule-2, mule-3, mule-4, xemacsのいずれか。")
  t       : 従来の tc-is22.el による実装を用いる。
  :advice : advice を使うことにより Emacs 内部関数の書き換えを無くした
            実装を用いる。
+ :im     : input method による実装を用いる。
+           tcode-use-input-method が自動で t となる。
 デフォルト値は t。nil にするには、設定ファイル ~/.tc 内でセットする。")
 
 (defvar tcode-use-as-default-input-method nil

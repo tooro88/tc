@@ -179,11 +179,14 @@
 ;;;
 
 (defvar tcode-use-isearch)
+(defvar tcode-use-input-method)
 
 (defun tcode--ishelper-init ()
   "tc-ishelper.el のロード時に初期化を行なう。"
   (when (eq tcode-use-isearch :advice)
     (tcode--advice-isearch-init))
+  (when (eq tcode-use-isearch :im)
+    (setq tcode-use-input-method t)) ; tc.elのロードより先に実行すること。
   (add-hook 'isearch-mode-hook #'tcode-isearch-init)
   (when tcode--has-wrapped-search
     (add-hook 'isearch-mode-hook #'tcode--wrapped-search-init-state)))
