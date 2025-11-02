@@ -153,58 +153,86 @@
   "句読点を変更できる。"
   (should-not (tctest-cmp "[IMON] 。、 [KUTEN_A] 。、 [KUTEN_J] 。、"
     :expect "。、. , 。、<!>")))
+
+(ert-deftest tctest-katakana-in-prefix-maze ()
+  "前置交ぜ書き変換中にカタカナモードに変更できる。"
+  :tags '(:prefix)
+  (should-not (tctest-cmp "[IMON] あ [PREMAZE] # え # SPC い"
+    :expect "あヱい<!>"
+    :setup-fun #'tctest-bind-katakana)))
+
+(ert-deftest tctest-katakana-in-prefix-bushu ()
+  "前置部首変換中にカタカナモードに変更できる。"
+  :tags '(:prefix)
+  (should-not (tctest-cmp "[IMON] あ [PREBUSHU] # い # い"
+    :expect "あ似<!>"
+    :setup-fun #'tctest-bind-katakana)))
+
+(ert-deftest tctest-kuten-in-prefix-bushu ()
+  "前置部首変換中に句点を変更できる。"
+  :tags '(:prefix)
+  (should-not (tctest-cmp "[IMON] [KUTEN_A] 、 [PREBUSHU] 大 [KUTEN_J] 、"
+    :expect ", 犬<!>")))
+
 ;;;
 ;;; *tcode-isearch-start-state
 ;;;
 (ert-deftest tctest-isearch-start-nil-off ()
   "tcode-isearch-start-state nil、IM off で isearch 開始時 IM off"
   :tags '(:isearch-start)
-  (should-not (tctest-cmp "am C-s ma [MATCH]"
-    :initial "...人.ma"
-    :expect  "am...人.[ma<!>]"
+  (skip-unless tcode-use-isearch)
+  (should-not (tctest-cmp "am C-s ma [IMON] 人 [MATCH]"
+    :initial "...人人..ma人..人ma..mama"
+    :expect  "am...人人..[ma人<!>]..人ma..mama"
     :vars '((tcode-isearch-start-state nil)))))
 
 (ert-deftest tctest-isearch-start-nil-on ()
   "tcode-isearch-start-state nil、IM on で isearch 開始時 IM on"
   :tags '(:isearch-start)
   (skip-unless tcode-use-isearch)
-  (should-not (tctest-cmp "[IMON] 色 C-s 人 [MATCH]"
-    :initial "...人.ma"
-    :expect  "色...[人<!>].ma"
+  (should-not (tctest-cmp "[IMON] 色 C-s 人 [IMOFF] ma [MATCH]"
+    :initial "...人人..ma人..人ma..mama"
+    :expect "色...人人..ma人..[人ma<!>]..mama"
     :vars '((tcode-isearch-start-state nil)))))
 
 (ert-deftest tctest-isearch-start-0-off ()
   "tcode-isearch-start-state 0、IM off で isearch 開始時 IM off"
   :tags '(:isearch-start)
-  (should-not (tctest-cmp "am C-s ma [MATCH]"
-    :initial "...人.ma"
-    :expect  "am...人.[ma<!>]"
+  (skip-unless tcode-use-isearch)
+  (should-not (tctest-cmp "am C-s ma [IMON] 人 [MATCH]"
+    :initial "...人人..ma人..人ma..mama"
+    :expect "am...人人..[ma人<!>]..人ma..mama"
     :vars '((tcode-isearch-start-state 0)))))
 
 (ert-deftest tctest-isearch-start-0-on ()
   "tcode-isearch-start-state 0、IM on で isearch 開始時 IM off"
   :tags '(:isearch-start)
-  (should-not (tctest-cmp "[IMON] 色 C-s ma [MATCH]"
-    :initial "...人.ma"
-    :expect  "色...人.[ma<!>]"
+  ;; tc-is22 実装では、isearch 中初回の切り換えでオフのまま
+  :expected-result (if (eq tcode-use-isearch t) :failed :passed)
+  (skip-unless tcode-use-isearch)
+  (should-not (tctest-cmp "[IMON] 色 C-s ma [IMON] 人 [MATCH]"
+    :initial "...人人..ma人..人ma..mama"
+    :expect "色...人人..[ma人<!>]..人ma..mama"
     :vars '((tcode-isearch-start-state 0)))))
 
 (ert-deftest tctest-isearch-start-1-off ()
   "tcode-isearch-start-state 1、IM off で isearch 開始時 IM on"
   :tags '(:isearch-start)
+  ;; tc-is22 実装では、isearch 中初回の切り換えでオンのまま
+  :expected-result (if (eq tcode-use-isearch t) :failed :passed)
   (skip-unless tcode-use-isearch)
-  (should-not (tctest-cmp "am C-s 人 [MATCH]"
-    :initial "...人.ma"
-    :expect  "am...[人<!>].ma"
+  (should-not (tctest-cmp "am C-s 人 [IMOFF] ma [MATCH]"
+    :initial "...人人..ma人..人ma..mama"
+    :expect "am...人人..ma人..[人ma<!>]..mama"
     :vars '((tcode-isearch-start-state 1)))))
 
 (ert-deftest tctest-isearch-start-1-on ()
   "tcode-isearch-start-state 1、IM on で isearch 開始時 IM on"
   :tags '(:isearch-start)
   (skip-unless tcode-use-isearch)
-  (should-not (tctest-cmp "[IMON] 色 C-s 人 [MATCH]"
-    :initial "...人.ma"
-    :expect  "色...[人<!>].ma"
+  (should-not (tctest-cmp "[IMON] 色 C-s 人 [IMOFF] ma [MATCH]"
+    :initial "...人人..ma人..人ma..mama"
+    :expect "色...人人..ma人..[人ma<!>]..mama"
     :vars '((tcode-isearch-start-state 1)))))
 
 ;;;
@@ -306,6 +334,24 @@
     :initial "...歌手 か手"
     :expect "...[歌手<!>] か手")))
 
+(ert-deftest tctest-delete-postfix-maze-in-isearch ()
+  "isearch 中の後置交ぜ書き変換結果を1文字だけ削除できる。"
+  :tags '(:postfix)
+  ;; 非 :im 実装では変換後も minibuffer にいるので問題にならない。
+  (skip-unless (eq tcode-use-isearch :im))
+  (should-not (tctest-cmp "[IMON] C-s ななめ [POSTMAZE] RET DEL 陽 [MATCH]"
+    :initial "...斜陽...斜め"
+    :expect "<DING>...[斜陽<!>]...斜め")))
+
+(ert-deftest tctest-delete-prefix-maze-in-isearch ()
+  "isearch 中の後置交ぜ書き変換結果を1文字だけ削除できる。"
+  :tags '(:postfix)
+  ;; 非 :im 実装では変換後も minibuffer にいるので問題にならない。
+  (skip-unless (eq tcode-use-isearch :im))
+  (should-not (tctest-cmp "[IMON] C-s [PREMAZE] ななめ SPC DEL 陽 [MATCH]"
+    :initial "...斜陽...斜め"
+    :expect "...[斜陽<!>]...斜め")))
+
 ;;;
 ;;; *isearch での各種入力モード
 ;;;
@@ -371,6 +417,133 @@
   (should-not (tctest-cmp "[IMON] C-s 。、[KUTEN_A]。、[KUTEN_J]。、[MATCH]"
     :initial "...|. , . , . , |。、. , 。、|。、。、。、"
     :expect  "...|. , . , . , |[。、. , 。、<!>]|。、。、。、")))
+
+(ert-deftest tctest-katakana-in-isearch-prefix-maze ()
+  "isearch 中の前置交ぜ書き変換中にカタカナモードに変更できる。"
+  :tags '(:prefix)
+  ;; 非 :im 実装では確定後、minibufferを出るための RET が必要。次テストにて。
+  (skip-unless (eq tcode-use-isearch :im))
+  (should-not (tctest-cmp "[IMON] C-s あ [PREMAZE] # え # SPC い [MATCH]"
+    :initial "...あえい..あヱい"
+    :expect  "...あえい..[あヱい<!>]"
+    :setup-fun #'tctest-bind-katakana)))
+
+(ert-deftest tctest-katakana-in-isearch-prefix-maze-is22 ()
+  "isearch 中の前置交ぜ書き変換中にカタカナモードに変更できる。"
+  :tags '(:prefix)
+  ;; 非 :im 実装では確定後、minibufferを出るための RET が必要。
+  (skip-unless (tctest-is-non-im-p))
+  (should-not (tctest-cmp "[IMON] C-s あ [PREMAZE] # え # SPC RET い [MATCH]"
+    :initial "...あえい..あヱい"
+    :expect  "...あえい..[あヱい<!>]"
+    :setup-fun #'tctest-bind-katakana)))
+
+(ert-deftest tctest-katakana-in-isearch-prefix-bushu ()
+  "isearch 中の前置部首変換中にカタカナモードに変更できる。"
+  :tags '(:prefix)
+  ;; :im でのみ実装。
+  :expected-result (if (eq tcode-use-isearch :im) :passed :failed)
+  (skip-unless tcode-use-isearch)
+  (should-not (tctest-cmp "[IMON] C-s あ [PREBUSHU] # い # い [MATCH]"
+    :initial "...あ似"
+    :expect "...[あ似<!>]"
+    :setup-fun #'tctest-bind-katakana)))
+
+(ert-deftest tctest-kuten-in-isearch-prefix-bushu ()
+  "isearch 中の前置部首変換中に句点を変更できる。"
+  :tags '(:prefix)
+  ;; :im でのみ実装。
+  :expected-result (if (eq tcode-use-isearch :im) :passed :failed)
+  (skip-unless tcode-use-isearch)
+  (should-not (tctest-cmp
+	       "[IMON] C-s [KUTEN_A] 、 [PREBUSHU] 大 [KUTEN_J] 、 [MATCH]"
+    :initial "..., 犬"
+    :expect "...[, 犬<!>]")))
+
+;;;
+;;; *モード表示
+;;;
+
+(ert-deftest tctest-start-mode ()
+  "テスト開始のモード表示は[]。" ; 初回 C-\ するまでは空。
+  (should-not (tctest-cmp "[MODE]"
+    :expect "[]<!>")))
+
+(ert-deftest tctest-im-mode ()
+  "[IMON][IMOFF] で [TC] 表示が切り換わる。"
+  (should-not (tctest-cmp "[IMON] [MODE] 人 [IMOFF] [MODE] ma"
+    :expect "[TC]人[--]ma<!>")))
+
+(ert-deftest tctest-alnum-mode ()
+  "[ALNUM_ZEN][ALNUM_HAN] で [Ｔ］表示が切り換わる。"
+  (should-not (tctest-cmp
+	       "[IMON] [MODE] A [ALNUM_ZEN] [MODE] A [ALNUM_HAN] [MODE] A"
+    :expect "[TC]A[Ｔ]Ａ[TC]A<!>")))
+
+(ert-deftest tctest-katakana-mode ()
+  "カタカナモードの表示が切り換わる。"
+  (should-not (tctest-cmp
+	       "[IMON] [MODE] あ # [MODE] ア # [MODE] あ"
+    :expect "[TCひ]あ[TCカ]ア[TCひ]あ<!>"
+    :setup-fun #'tctest-bind-katakana)))
+
+
+;;;
+;;; *tcode-isearch-start-stateのモード表示
+;;;
+(ert-deftest tctest-isearch-start-nil-off-mode ()
+  "t-i-s-s nil、IM off で isearch 開始時、モード表示 []"
+  :tags '(:isearch-start)
+  (should-not (tctest-cmp "[MODE] C-s [MODE] ma [MATCH]"
+    :initial "...人.ma"
+    :expect  "[][]...人.[ma<!>]"
+    :vars '((tcode-isearch-start-state nil)))))
+
+(ert-deftest tctest-isearch-start-nil-on-mode ()
+  "t-i-s-s nil、IM on で isearch 開始時、モード表示 [TC]"
+  :tags '(:isearch-start)
+  (skip-unless tcode-use-isearch)
+  (should-not (tctest-cmp "[IMON] [MODE] C-s [MODE] 人 [MATCH]"
+    :initial "...人.ma"
+    :expect  "[TC][TC]...[人<!>].ma"
+    :vars '((tcode-isearch-start-state nil)))))
+
+(ert-deftest tctest-isearch-start-0-off-mode ()
+  "t-i-s-s 0、IM off で isearch 開始時、モード表示 []"
+  :tags '(:isearch-start)
+  (should-not (tctest-cmp "[MODE] C-s [MODE] ma [MATCH]"
+    :initial "...人.ma"
+    :expect  "[][]...人.[ma<!>]"
+    :vars '((tcode-isearch-start-state 0)))))
+
+(ert-deftest tctest-isearch-start-0-on-mode ()
+  "t-i-s-s 0、IM on で isearch 開始時、モード表示 [--]"
+  :tags '(:isearch-start)
+  :expected-result (if (eq tcode-use-isearch t) :failed :passed)
+  (skip-unless tcode-use-isearch)
+  (should-not (tctest-cmp "[IMON] [MODE] C-s [MODE] ma [MATCH]"
+    :initial "...人.ma"
+    :expect  "[TC][--]...人.[ma<!>]"
+    :vars '((tcode-isearch-start-state 0)))))
+
+(ert-deftest tctest-isearch-start-1-off-mode ()
+  "t-i-s-s 1、IM off で isearch 開始時、モード表示 [TC]"
+  :tags '(:isearch-start)
+  :expected-result (if (eq tcode-use-isearch t) :failed :passed)
+  (skip-unless tcode-use-isearch)
+  (should-not (tctest-cmp "[MODE] C-s [MODE] 人 [MATCH]"
+    :initial "...人.ma"
+    :expect  "[][TC]...[人<!>].ma"
+    :vars '((tcode-isearch-start-state 1)))))
+
+(ert-deftest tctest-isearch-start-1-on-mode ()
+  "t-i-s-s 1、IM on で isearch 開始時、モード表示 [TC]"
+  :tags '(:isearch-start)
+  (skip-unless tcode-use-isearch)
+  (should-not (tctest-cmp "[IMON] [MODE] C-s [MODE] 人 [MATCH]"
+    :initial "...人.ma"
+    :expect  "[TC][TC]...[人<!>].ma"
+    :vars '((tcode-isearch-start-state 1)))))
 
 ;;;
 ;;; *wrapped search

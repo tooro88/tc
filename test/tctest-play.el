@@ -78,7 +78,7 @@ Specifying :show-buf t displays the result buffer with additional info."
 	 (cleanup-fun (gethash :cleanup-fun params))
 	 (conf (current-window-configuration))
 	 buf result status)
-    (when show-buf
+    (when (eq show-buf :defer-cleanup)
       (puthash :cleanup-postponed cleanup-fun params)
       (puthash :cleanup-fun nil params))
     (setq buf (apply #'tctest-play keys args))
@@ -155,11 +155,14 @@ hash-table DEFAULT-PARAMS."
 
 (defun tctest--show-status (params status)
   "Append information to the result buffer of tctest-play."
-  (let ((initial (gethash :initial params))
-	(expect  (gethash :expect  params))
-	(buf     (gethash :buf     params))
-	(keys    (gethash :keys    params))
-	status-pos)
+  (let* ((initial  (gethash :initial  params))
+	 (expect   (gethash :expect   params))
+	 (buf      (gethash :buf      params))
+	 (keys     (gethash :keys     params))
+	 (show-buf (gethash :show-buf params))
+	 (cleanup-msg (if (eq show-buf :defer-cleanup)
+			  " and call cleanup-fun" ""))
+	 status-pos)
     (with-current-buffer buf
       (goto-char (point-max))
       (unless (bolp) (insert "\n"))
@@ -169,7 +172,7 @@ hash-table DEFAULT-PARAMS."
       (insert "----------- status -----------\n")
       (insert (if status "OK" "FAILURE"))
       (setq status-pos (point))
-      (insert "        ('q' to kill buffer and call cleanup-fun)\n")
+      (insert "        ('q' to kill buffer" cleanup-msg ")\n")
       (insert "----------- initial -----------\n")
       (insert (or initial "No :initial specified"))
       (unless (bolp) (insert "\n"))
@@ -235,12 +238,14 @@ hash-table DEFAULT-PARAMS."
     (puthash :cleanup-fun #'tctest--cleanup params)
     (tctest-check (tctest-key-filter keys) :params params)))
 
+(defvar tctest--insert-mode-key "C-x i" ; isearch-mode-map で空いているキー
+  "tctest-insert-mode を起動するキー。")
 (defvar tctest-key-abbrevs
-  '(("[MATCH]" "C-c C-m")  ; isearchのマッチ範囲を[]で囲む。
+  `(("[MATCH]" "C-c C-m")  ; isearchのマッチ範囲を[]で囲む。
+    ("[MODE]"  ,tctest--insert-mode-key)  ; モードラインの[]部分を挿入する。
     ("[IMON]" "C-\\")  ; キー入力列の読みやすさのため、ON/OFF 別にする。
     ("[IMOFF]" "C-\\")
-    ("[UNDO]" "C-x u")
-))
+    ("[UNDO]" "C-x u")))
 
 (defun tctest-where (cmd)
   "コマンド CMD に割り当てられた T-Code キー列(文字のリスト)。"
@@ -327,6 +332,11 @@ hash-table DEFAULT-PARAMS."
   "文字列 KEYS の中の T-Code 文字と特殊キーワードをキー列に置換する。"
   (tctest--untc (tctest--expand-key-abbrevs keys)))
 
+(defun tctest-insert-mode ()
+  "モードラインの[]部分をバッファに挿入する。"
+  (interactive)
+  (insert (format "[%s]" (or current-input-method-title ""))))
+
 (defun tctest-show-match ()
   "直前のサーチのマッチ位置を[]で囲む。"
   (interactive)
@@ -347,6 +357,7 @@ hash-table DEFAULT-PARAMS."
   (let ((map (make-sparse-keymap)))
     (define-key map (kbd "C-c C-q") 'tctest-quit-buffer)
     (define-key map (kbd "C-c C-m") 'tctest-show-match)
+    (define-key map (kbd tctest--insert-mode-key) 'tctest-insert-mode)
     map)
   "tctest-cmp によるテストで使用するキーバインディング。")
 
@@ -369,6 +380,8 @@ hash-table DEFAULT-PARAMS."
       (toggle-input-method)) ; 初期状態はIMオフ。
     (when vars
       (tctest--set-local-vars vars))
+    (define-key isearch-mode-map (kbd tctest--insert-mode-key)
+		#'tctest-insert-mode)
     (when setup-user-fun
       (funcall setup-user-fun params))))
 
@@ -379,6 +392,7 @@ hash-table DEFAULT-PARAMS."
 	(cleanup-user-fun (gethash :cleanup-user-fun params)))
     (when cleanup-user-fun
       (funcall cleanup-user-fun params))
+    (define-key isearch-mode-map (kbd tctest--insert-mode-key) nil)
     (dolist (pair set-keys)
       (apply #'tcode-set-key pair))
     (when bak-input-method
@@ -399,6 +413,8 @@ tctest-cmp によるテスト終了時にこのバインディングは解除さ
 
 (defun tctest-bind-katakana (params)
   "`#' でカタカナモードをオン/オフできるようにする。"
+  (tctest--set-local-vars '((tcode-katakana-mode-indicator "カ")
+			    (tcode-hiragana-mode-indicator "ひ")))
   (tctest-tcode-set-key params "#" 'tcode-toggle-katakana-mode))
 
 (provide 'tctest-play)
