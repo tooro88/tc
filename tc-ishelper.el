@@ -81,6 +81,57 @@
 (defun tcode-isearch-make-string-for-wrapping (s) s)
 
 ;;;
+;;; wrapped-search
+;;;
+
+(defun tcode--wrapped-search-regexp (string &optional lax)
+  "STRING または、STRING の日本語文字の前に行折り返しなどの空白が狭ま
+れた文字列にマッチする正規表現を返す。"
+  (mapconcat (lambda (ch)
+	       (let ((s-ch (char-to-string ch)))
+		 (cond ((= (char-width ch) 2)
+			(concat tcode-isearch-ignore-regexp s-ch))
+		       (t
+			(regexp-quote s-ch)))))
+	     (string-to-list string)
+	     nil))
+
+(defun tcode--wrapped-search-init-state ()
+  "isearch モード開始時、必要に応じて wrapped-search を有効にする。"
+  (when (and isearch-mode
+	     tcode-isearch-enable-wrapped-search
+	     (boundp 'isearch-regexp-function) ; この2行は emacs-24 での
+	     (fboundp 'isearch-toggle-wrap)    ; compiler warning 対策。
+	     (not isearch-regexp)            ; regexp search でないとき
+	     (null isearch-regexp-function)) ; word/symbol search でないとき
+    (isearch-toggle-wrap)))
+
+;;;
+;;; isearch-toggle-wrap の定義
+;;;
+
+;; emacs-24ではisearch-regexp-functionが無いので、このファイルの実装方
+;; 法では wrapped-search を提供できない。
+(defconst tcode--has-wrapped-search (fboundp 'isearch-define-mode-toggle)
+  "wrapped-search を実装可能な emacs バージョンかどうか。")
+
+(unless tcode--has-wrapped-search
+  ;; emacs-24 用ダミー実装。
+  (defmacro isearch-define-mode-toggle (&rest args)))
+
+(require 'cl-macs)
+;; isearch 内のコマンド isearch-toggle-wrap を作り、"M-s @" にバインド
+;; する。
+;;  - FIXME: キーバインドは特に必要ないが、このマクロの仕様上スキップ
+;;    できない。将来の emacs 本体によるバインディングと衝突しないキー
+;;    を選びたい。衝突時にキー変更することを考えると、ユーザーが使用し
+;;    ないよう、すぐにバインドを消すべきか。
+;;  - ???: このマクロはトップレベルに置かないとエラー。emacs -qでこの
+;;    ファイルだけをロードした場合に発生。原因不明。
+(isearch-define-mode-toggle wrap "@" tcode--wrapped-search-regexp
+  "Turning on wrap search turns off regexp mode.")
+
+;;;
 ;;; 初期化
 ;;;
 
@@ -90,7 +141,9 @@
   "tc-ishelper.el のロード時に初期化を行なう。"
   (when (eq tcode-use-isearch 'advice)
     (advice-add 'isearch-printing-char :around #'tcode--isearch-printing-char))
-  (add-hook 'isearch-mode-hook #'tcode-isearch-init))
+  (add-hook 'isearch-mode-hook #'tcode-isearch-init)
+  (when tcode--has-wrapped-search
+    (add-hook 'isearch-mode-hook #'tcode--wrapped-search-init-state)))
 
 (tcode--ishelper-init)
 (provide 'tc-ishelper)
