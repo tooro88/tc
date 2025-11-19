@@ -23,6 +23,7 @@
 ;;; Code:
 
 (require 'tc-pre)
+(defvar tcode-use-input-method)
 
 (defun tcode--load-isearch ()
   "`tcode-use-isearch' の設定に応じて必要なファイルをロードする。"
@@ -83,6 +84,8 @@
 	(setq-default default-input-method tcode-default-input-method)
 	(setq default-input-method tcode-default-input-method)))
   ;; isearch
+  (when (eq tcode-use-isearch 'im)
+    (setq tcode-use-input-method t)) ; tc.elのロードより先に実行すること。
   (when tcode-use-as-default-input-method
     (tcode--load-isearch))
   ;; autoload
