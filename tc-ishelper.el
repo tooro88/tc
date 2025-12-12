@@ -21,6 +21,8 @@
 
 ;;; Code:
 
+(eval-when-compile
+  (require 'cl-macs))  ; for cl-callf used in isearch-define-mode-toggle
 (require 'tc-iscommon)
 
 ;;;
@@ -81,6 +83,45 @@
 (defalias 'tcode-isearch-make-string-for-line-fold #'identity)
 
 ;;;
+;;; line-fold search
+;;;
+
+(defun tcode--line-fold-search-regexp (string &optional lax)
+  "STRING または、STRING の日本語文字の前に行折り返しなどの空白が挟ま
+れた文字列にマッチする正規表現を返す。"
+  (mapconcat (lambda (ch)
+	       (let ((s-ch (char-to-string ch)))
+		 (cond ((= (char-width ch) 2)
+			(concat tcode-isearch-ignore-regexp s-ch))
+		       (t
+			(regexp-quote s-ch)))))
+	     (string-to-list string)
+	     nil))
+
+(defun tcode--define-toggle-line-fold ()
+  "isearch-toggle-line-fold を定義する。"
+  (when (fboundp 'isearch-define-mode-toggle)
+    (let ((orig-binding (lookup-key isearch-mode-map (kbd "M-s @"))))
+      ;; isearch-toggle-line-fold が定義されることをバイトコンパイラに知
+      ;; らせるために eval-and-compile が必要。
+      (eval-and-compile
+	;; isearch 内のコマンド isearch-toggle-line-fold を作り、"M-s @"
+	;; にバインドする。キーバインドは特に必要ないが、このマクロの仕
+	;; 様上スキップできない。一時的にバインドしてすぐに元に戻す。
+	(isearch-define-mode-toggle line-fold "@" tcode--line-fold-search-regexp
+	  "Turning on line-fold search turns off regexp mode."))
+      (define-key isearch-mode-map (kbd "M-s @") orig-binding)
+      (add-hook 'isearch-mode-hook #'tcode--line-fold-search-init-state))))
+
+(defun tcode--line-fold-search-init-state ()
+  "isearch 開始時、必要に応じて line-fold-search を有効にする。"
+  (when (and isearch-mode
+	     tcode-isearch-enable-line-fold-search
+	     (not isearch-regexp)            ; regexp search でないとき
+	     (null isearch-regexp-function)) ; word/symbol search でないとき
+    (isearch-toggle-line-fold)))
+
+;;;
 ;;; 初期化
 ;;;
 
@@ -88,6 +129,7 @@
 
 (defun tcode--ishelper-init ()
   "tc-ishelper.el のロード時に初期化を行なう。"
+  (tcode--define-toggle-line-fold)
   (when (eq tcode-use-isearch 'advice)
     (advice-add 'isearch-printing-char :around #'tcode--isearch-printing-char))
   (add-hook 'isearch-mode-hook #'tcode-isearch-init))
