@@ -40,11 +40,13 @@ sole argument to both :setup-fun and :cleanup-fun."
 	 (initial      (gethash :initial      params))
 	 (timeout      (gethash :timeout      params))
 	 (buf          (gethash :buf          params))
+	 (quiet        (gethash :quiet        params))
 	 (no-kbd       (gethash :no-kbd       params))
 	 (no-ding      (gethash :no-ding      params))
 	 (setup-fun    (gethash :setup-fun    params))
 	 (cleanup-fun  (gethash :cleanup-fun  params))
-	 (error-filter (gethash :error-filter params)))
+	 (error-filter (gethash :error-filter params))
+	 (inhibit-message quiet))
     (puthash :keys keys params)
     (when (null buf)
       (setq buf (generate-new-buffer "*play*"))
@@ -225,10 +227,16 @@ hash-table DEFAULT-PARAMS."
   #s(hash-table data (:show-buf nil))
   "Default values used by `tctest-cmp'.")
 
+(defun tctest-load-tc ()
+  "tc.el がロード済みの状態にする。"
+  ;; (require 'tc) でも十分だが、テストなので念のため、ユーザーの使用
+  ;; 方法に準じた操作のみで実現する。
+  (toggle-input-method)  ; 初回の有効化で、tc.el がロードされる。
+  (toggle-input-method))
+
 (defun tctest-cmp (keys &rest args)
   "T-Code テスト用の設定を行なった上で、`tctest-check'を呼ぶ。"
-  (toggle-input-method) ; load tc
-  (toggle-input-method)
+  (tctest-load-tc)  ; T-Code 表の逆引きのために必要。
   (let* ((params (tctest-fill-params tctest-cmp-default-params args))
 	 (setup-user-fun   (gethash :setup-fun   params))
 	 (cleanup-user-fun (gethash :cleanup-fun params)))

@@ -34,6 +34,10 @@
 ;;   notctest : tctest.el をロードしない。
 ;;   uim      : tcode-use-input-method を t に設定する。
 ;;   nodefim  : tcode-use-as-default-input-method を nil に設定する。
+;;   quiet    : バッチテストでの表示量を減らす。具体的には、ERT を
+;;              quiet モード(summary だけを表示するモード。emacs-27 以
+;;              降のみ)にした上で、ERT 以外のメッセージを極力表示しな
+;;              いようにする。
 ;;
 ;;  FIXME: バッチモードで、単体テストを実行できるようにしたい。
 ;;  --batch で起動した emacs は、対話モードと動作が異なる場合がある
@@ -47,6 +51,10 @@
 (defvar tcode-use-isearch)
 (defvar tcode-use-input-method)
 (defvar tcode-use-as-default-input-method)
+(defvar tcode-verbose-message)
+(defvar tctest-play-default-params)
+(defvar ert-quiet)
+(declare-function tctest-load-tc "tctest-play")
 
 (defconst tctest-env-mandatory-keywords
   '("isim" "isadvice" "isoverwrite" "ist" "isnil" "notc")
@@ -69,6 +77,9 @@
 	(message msg) ; to stderr
       (insert msg "\n"))))
 
+(defun tctest-env-quiet-p (keywords)
+  (member "quiet" keywords))
+
 (defun tctest-env-load-tc (keywords)
   "変数設定をした上で、tc-setup をロードする。"
   ;; tctest-env-chk-mandatory によるチェックにより、キーワード isim,
@@ -90,6 +101,12 @@
       (setq tcode-use-as-default-input-method nil)))
   (when (member "uim" keywords)
     (setq tcode-use-input-method t))
+  (when (tctest-env-quiet-p keywords)
+    ;; .tc-record の読み込みメッセージを非表示に。
+    (setq tcode-verbose-message nil)
+    ;; この値が非 nil だと、文字入力のたびに tcode-input-method 内で
+    ;; tcode-verbose-message が t にセットされてしまう。
+    (setq input-method-verbose-flag nil))
   (unless (member "notc" keywords)
     (require 'tc-setup))
   (when (member "nodefim" keywords)
@@ -110,12 +127,13 @@
   "ert のバッチテストを実行する。"
   (when (and noninteractive
 	     (not (member "nobatch" keywords)))
-    ;; FIXME: quiet オプションは、実験的に付けてはみたものの、isearch
-    ;; の echo area 表示が標準エラーに大量に出力されるので、あまり意味
-    ;; はなかった。個々のテスト中で、inhibit-message t を設定する機能
-    ;; を追加する必要がある。
-    (let ((ert-quiet (member "quiet" keywords)))
-      (ert-run-tests-batch-and-exit))))
+    (when (tctest-env-quiet-p keywords)
+      (setq ert-quiet t)  ; ERT を quiet モードに (emacs-27 以降で有効)
+      (puthash :quiet t tctest-play-default-params) ; テスト中の表示オフ
+      (let ((inhibit-message t))
+	;; tc-tbl.el のロードを、表示オフの状態で済ませおく。
+	(tctest-load-tc)))
+    (ert-run-tests-batch-and-exit)))
 
 (defun tctest-env-main ()
   (let* ((keywords-packed (or (getenv "TCTEST_ENV")
@@ -124,20 +142,21 @@
     (tctest-env-chk-mandatory keywords)
     (when (member "debug" keywords)
       (setq debug-on-error t))
-    (tctest-env-msg "dir: %s" default-directory)
-    (tctest-env-msg "emacs-version: %s" emacs-version)
-    (tctest-env-msg "keywords: %S" keywords)
-    (tctest-env-load-tc keywords)
-    (unless (or (member "notc" keywords)
-		(member "notctest" keywords))
-      (require 'tctest))
-    (tctest-env-show-exprs '(tcode-data-directory
-			     tcode-use-isearch
-			     tcode-use-input-method
-			     tcode-use-as-default-input-method
-			     (locate-library "tc-setup")
-			     (featurep 'tc-is22)
-			     (featurep 'tc-ishelper)))
+    (let ((inhibit-message (tctest-env-quiet-p keywords)))
+      (tctest-env-msg "dir: %s" default-directory)
+      (tctest-env-msg "emacs-version: %s" emacs-version)
+      (tctest-env-msg "keywords: %S" keywords)
+      (tctest-env-load-tc keywords)
+      (unless (or (member "notc" keywords)
+		  (member "notctest" keywords))
+	(require 'tctest))
+      (tctest-env-show-exprs '(tcode-data-directory
+			       tcode-use-isearch
+			       tcode-use-input-method
+			       tcode-use-as-default-input-method
+			       (locate-library "tc-setup")
+			       (featurep 'tc-is22)
+			       (featurep 'tc-ishelper))))
     (tctest-env-run-test keywords)))
 
 (tctest-env-main)
